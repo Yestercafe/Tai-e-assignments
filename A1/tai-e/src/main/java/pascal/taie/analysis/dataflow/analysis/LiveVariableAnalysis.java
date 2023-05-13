@@ -40,31 +40,75 @@ public class LiveVariableAnalysis extends
         super(config);
     }
 
+    /**
+     * The flowing of Live variable analysis is backward
+     * @return false
+     */
     @Override
     public boolean isForward() {
         return false;
     }
 
+    /**
+     * IN[exit] = empty
+     * @param cfg
+     * @return
+     */
     @Override
     public SetFact<Var> newBoundaryFact(CFG<Stmt> cfg) {
-        // TODO - finish me
-        return null;
+        return new SetFact<>();
     }
 
+    /**
+     * IN[B] = empty
+     * @return
+     */
     @Override
     public SetFact<Var> newInitialFact() {
-        // TODO - finish me
-        return null;
+        return new SetFact<>();
     }
 
+    /**
+     * out[B] |= IN[S] which S is each successor of B
+     * @param fact
+     * @param target
+     */
     @Override
     public void meetInto(SetFact<Var> fact, SetFact<Var> target) {
-        // TODO - finish me
+        fact.union(target);
     }
 
+    /**
+     * IN[B] = use_B | (OUT[B] - def_B)
+     * => IN[B] |= use_B; IN[B] |= OUT[B] - def_B
+     * @param stmt
+     * @param in
+     * @param out
+     * @return whether `in` is changed
+     */
     @Override
     public boolean transferNode(Stmt stmt, SetFact<Var> in, SetFact<Var> out) {
-        // TODO - finish me
-        return false;
+        var originalIn = in.copy();
+
+        var uses = new SetFact<Var>();   // use_B
+        System.out.println(stmt.getUses());
+        for (var use : stmt.getUses()) {
+            if (use instanceof Var) {
+                uses.add((Var) use);
+            }
+        }
+
+        var myOut = out.copy();    // out[B]
+        if (stmt.getDef().isPresent()) {
+            var lValue = stmt.getDef().get();
+            if (lValue instanceof Var) {
+                myOut.remove((Var) lValue);    // out[B] - def_B
+            }
+        }
+
+        in.union(uses);       // in[B] |= use_B
+        in.union(myOut);      // in[B] |= out[B] - def_B
+
+        return !in.equals(originalIn);
     }
 }

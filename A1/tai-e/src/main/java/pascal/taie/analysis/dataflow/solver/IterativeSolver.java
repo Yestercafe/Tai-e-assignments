@@ -26,6 +26,10 @@ import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.cfg.CFG;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
 
     public IterativeSolver(DataflowAnalysis<Node, Fact> analysis) {
@@ -39,6 +43,29 @@ class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
 
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        List<Node> revFlow = new ArrayList<>();
+        for (var node : cfg) {
+            if (!node.equals(cfg.getExit())) {
+                revFlow.add(node);
+            }
+        }
+        Collections.reverse(revFlow);
+
+        boolean isChanged;
+        // while (changes to any IN occur)
+        do {
+            isChanged = false;
+            for (var node : revFlow) {
+                var outB = result.getOutFact(node);
+                // OUT[B] = || IN[S] which S is all successors of B
+                for (var succ : cfg.getSuccsOf(node)) {
+                    analysis.meetInto(outB, result.getInFact(succ));
+                }
+
+                // IN[B] = use_B | (OUT[B] - def_B)
+                var inB = result.getInFact(node);
+                isChanged |= analysis.transferNode(node, inB, outB);
+            }
+        } while (isChanged);
     }
 }

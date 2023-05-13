@@ -81,7 +81,21 @@ public abstract class Solver<Node, Fact> {
     }
 
     protected void initializeBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        // > 当然，为了实现上面所说的 meet 策略，你需要在初始化阶段给每条语句的 OUT[S] 赋上和 IN[S] 一样的初值。
+
+        // IN[exit] = empty
+        result.setInFact(cfg.getExit(), analysis.newBoundaryFact(cfg));
+        result.setOutFact(cfg.getExit(), analysis.newBoundaryFact(cfg));
+
+        // for (each basic block B\exit)
+        for (var node : cfg) {
+            // this is \exit
+            if (!node.equals(cfg.getExit())) {
+                // IN[B] = empty
+                result.setInFact(node, analysis.newInitialFact());
+                result.setOutFact(node, analysis.newInitialFact());
+            }
+        }
     }
 
     /**
