@@ -40,23 +40,25 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
         List<Node> qNodes = new LinkedList<>();
         for (var node : cfg) {
-            if (!node.equals(cfg.getEntry())) {
+            if (!cfg.isEntry(node)) {
                 qNodes.add(node);
             }
         }
 
         int loopCounter = 0;
         while (!qNodes.isEmpty()) {
+            System.out.println("loopCounter = " + loopCounter);
             for (int sz = qNodes.size(); sz > 0; sz--) {
                 var fr = qNodes.remove(0);
-                var in = result.getInFact(fr);
                 var out = result.getOutFact(fr);
 
+                var newIn = analysis.newInitialFact();
                 for (var pred : cfg.getPredsOf(fr)) {
-                    analysis.meetInto(in, result.getOutFact(pred));
+                    analysis.meetInto(result.getOutFact(pred), newIn);
                 }
+                result.setInFact(fr, newIn);
 
-                if (analysis.transferNode(fr, in, out)) {
+                if (analysis.transferNode(fr, newIn, out)) {
                     qNodes.addAll(cfg.getSuccsOf(fr));
                 }
             }

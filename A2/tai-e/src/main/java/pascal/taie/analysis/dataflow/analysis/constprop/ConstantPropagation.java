@@ -26,6 +26,7 @@ import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.exp.*;
+import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
@@ -47,14 +48,6 @@ public class ConstantPropagation extends
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         var ret = new CPFact();
-        for (var node : cfg) {
-            if (node.getDef().isPresent()) {
-                var lValue = node.getDef().get();
-                if (lValue instanceof Var v) {
-                    ret.update(v, Value.getUndef());
-                }
-            }
-        }
         for (var param : cfg.getIR().getParams()) {
             ret.update(param, Value.getNAC());
         }
@@ -68,8 +61,8 @@ public class ConstantPropagation extends
 
     @Override
     public void meetInto(CPFact fact, CPFact target) {
-        target.forEach((k, v) -> {
-            fact.update(k, meetValue(fact.get(k), v));
+        fact.forEach((k, v) -> {
+            target.update(k, meetValue(target.get(k), v));
         });
     }
 
@@ -77,20 +70,12 @@ public class ConstantPropagation extends
      * Meets two Values.
      */
     public Value meetValue(Value v1, Value v2) {
-        if (v1.equals(Value.getNAC()) || v2.equals(Value.getNAC())) {
+        if (v1.isNAC() || v2.isNAC()) {
             return Value.getNAC();
-        } else if (v1.equals(Value.getUndef())) {
-            if (v2.isConstant()) {
-                return Value.makeConstant(v2.getConstant());
-            } else {
-                return v2;
-            }
-        } else if (v2.equals(Value.getUndef())) {
-            if (v1.isConstant()) {
-                return Value.makeConstant(v1.getConstant());
-            } else {
-                return v1;
-            }
+        } else if (v1.isUndef()) {
+            return v2;
+        } else if (v2.isUndef()) {
+            return v1;
         } else if (v1.getConstant() == v2.getConstant()) {  // v1 and v2 must be constants here
             return v1;
         } else {
@@ -108,25 +93,15 @@ public class ConstantPropagation extends
      */
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        // if `s` is not an assignment statement, `F` is the identity function
-        if (stmt.getDef().isEmpty()) {
-            var oldOut = out.copy();
-            meetInto(out, in);
-            return !oldOut.equals(out);
-        }
-
         var oldOut = out.copy();
-        var myIn = in.copy();
+        meetInto(in, out);
 
-        var lValue = stmt.getDef().get();
-        if (lValue instanceof Var v) {
-            myIn.remove(v);
-
-            meetInto(out, myIn);
-
-            var uses = stmt.getUses();
-            var ret = evaluate(uses.get(uses.size() - 1), in);
-            out.update(v, ret);
+        if (stmt instanceof DefinitionStmt definitionStmt) {
+            var lValue_ = definitionStmt.getLValue();
+            if (lValue_ instanceof Var lValue) {
+                var rValue= definitionStmt.getRValue();
+                out.update(lValue, evaluate(rValue, in));
+            }
         }
 
         return !oldOut.equals(out);
@@ -160,17 +135,18 @@ public class ConstantPropagation extends
     public static Value evaluate(Exp exp, CPFact in) {
         if (exp instanceof Var) {
             return in.get((Var) exp);
-        } else if (exp instanceof IntLiteral intLiteral) {
+        } else if (exp instanceof IntLiteral intLiteral) {   // never reach?
             return Value.makeConstant(intLiteral.getValue());
         } else if (exp instanceof BinaryExp binaryExp) {
             var op1_ = binaryExp.getOperand1();
             var op2_ = binaryExp.getOperand2();
+
             if (!canHoldInt(op1_) || !canHoldInt(op2_)) {
                 return Value.getUndef();
             }
             var op1 = in.get(op1_);
             var op2 = in.get(op2_);
-            if (op1.equals(Value.getNAC()) || op2.equals(Value.getNAC())) {
+            if (op1.isNAC() || op2.isNAC()) {
                 return Value.getNAC();
             } else if (op1.isConstant() && op2.isConstant()) {
                 int ans = 0;
@@ -209,6 +185,8 @@ public class ConstantPropagation extends
                         case SHR -> ans = op1.getConstant() >> op2.getConstant();
                         case USHR -> ans = op1.getConstant() >>> op2.getConstant();
                     }
+                } else {
+                    return Value.getNAC();
                 }
                 return Value.makeConstant(ans);
             } else {
