@@ -26,6 +26,10 @@ import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.cfg.CFG;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     WorkListSolver(DataflowAnalysis<Node, Fact> analysis) {
@@ -34,11 +38,57 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     @Override
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        List<Node> qNodes = new ArrayList<>();
+        for (var node : cfg) {
+            if (!cfg.isEntry(node)) {
+                qNodes.add(node);
+            }
+        }
+
+        while (!qNodes.isEmpty()) {
+            for (int sz = qNodes.size(); sz > 0; sz--) {
+                var fr = qNodes.remove(0);
+                var out = result.getOutFact(fr);
+
+                var newIn = analysis.newInitialFact();
+                for (var pred : cfg.getPredsOf(fr)) {
+                    analysis.meetInto(result.getOutFact(pred), newIn);
+                }
+                result.setInFact(fr, newIn);
+
+                if (analysis.transferNode(fr, newIn, out)) {
+                    qNodes.addAll(cfg.getSuccsOf(fr));
+                }
+            }
+        }
     }
 
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        // not use worklist algorithm in this method, don't worry, it can work
+        List<Node> revFlow = new ArrayList<>();
+        for (var node : cfg) {
+            if (!node.equals(cfg.getExit())) {
+                revFlow.add(node);
+            }
+        }
+        Collections.reverse(revFlow);
+
+        boolean isChanged;
+        // while (changes to any IN occur)
+        do {
+            isChanged = false;
+            for (var node : revFlow) {
+                var outB = result.getOutFact(node);
+                // OUT[B] = || IN[S] which S is all successors of B
+                for (var succ : cfg.getSuccsOf(node)) {
+                    analysis.meetInto(result.getInFact(succ), outB);
+                }
+
+                // IN[B] = use_B | (OUT[B] - def_B)
+                var inB = result.getInFact(node);
+                isChanged |= analysis.transferNode(node, inB, outB);
+            }
+        } while (isChanged);
     }
 }
