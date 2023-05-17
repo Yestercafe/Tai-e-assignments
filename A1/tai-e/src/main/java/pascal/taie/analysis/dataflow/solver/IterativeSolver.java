@@ -59,7 +59,7 @@ class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
                 var outB = result.getOutFact(node);
                 // OUT[B] = || IN[S] which S is all successors of B
                 for (var succ : cfg.getSuccsOf(node)) {
-                    analysis.meetInto(outB, result.getInFact(succ));
+                    analysis.meetInto(result.getInFact(succ), outB);
                 }
 
                 // IN[B] = use_B | (OUT[B] - def_B)
