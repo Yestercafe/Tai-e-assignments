@@ -24,6 +24,7 @@ package pascal.taie.analysis.dataflow.inter;
 
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
+import pascal.taie.analysis.dataflow.analysis.constprop.Value;,
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.icfg.CallEdge;
@@ -34,6 +35,7 @@ import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.classes.JMethod;
@@ -88,20 +90,38 @@ public class InterConstantPropagation extends
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
-        return null;
+        return out.copy();
     }
 
     @Override
     protected CPFact transferCallToReturnEdge(CallToReturnEdge<Stmt> edge, CPFact out) {
-        // TODO - finish me
+        var newOut = out.copy();
+        var source = edge.getSource();
+        if (source instanceof DefinitionStmt<?, ?> definitionStmt) {
+            var lValue = definitionStmt.getLValue();
+            if (lValue instanceof Var lVar) {
+                newOut.remove(lVar);       // do kill x of `x = ...`
+            }
+        }
         return null;
     }
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
-        // TODO - finish me
-        return null;
+        var newOut = callSiteOut.copy();
+        var source = edge.getSource();
+        var target = edge.getTarget();
+        if (source instanceof Invoke sourceInvoke) {
+            var args = sourceInvoke.getRValue().getArgs().stream().map(v -> {
+
+            })
+            var params = edge.getCallee().getIR().getParams();
+            assert args.size() == params.size();
+            for (int i = 0; i < args.size(); i++) {
+                newOut.update(params[i], args[i]);
+            }
+        }
+        return newOut;
     }
 
     @Override
