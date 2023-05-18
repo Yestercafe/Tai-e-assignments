@@ -147,6 +147,15 @@ public class ConstantPropagation extends
             var op1 = in.get(op1_);
             var op2 = in.get(op2_);
             if (op1.isNAC() || op2.isNAC()) {
+                if (op2.isConstant() && op2.getConstant() == 0) {   // op1 is NAC
+                    if (binaryExp instanceof ArithmeticExp arithmeticExp) {
+                        switch (arithmeticExp.getOperator()) {
+                            case DIV, REM -> {
+                                return Value.getUndef();
+                            }
+                        }
+                    }
+                }
                 return Value.getNAC();
             } else if (op1.isConstant() && op2.isConstant()) {
                 int ans = 0;
