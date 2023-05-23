@@ -52,18 +52,17 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
         DefaultCallGraph callGraph = new DefaultCallGraph();
         callGraph.addEntryMethod(entry);
 
-        var reachableMethods = new HashSet<JMethod>();
-
         var q = new LinkedList<JMethod>();
         q.add(entry);
         // do memorized BFS
         while (!q.isEmpty()) {
             var fr = q.removeFirst();
-            if (!reachableMethods.contains(fr)) {
-                reachableMethods.add(fr);
+            if (!callGraph.contains(fr)) {
+                callGraph.addReachableMethod(fr);
                 for (var ir : fr.getIR()) {
                     if (ir instanceof Invoke cs) {
-                        for (var targetMethod : resolve(cs)) {
+                        var t = resolve(cs);
+                        for (var targetMethod : t) {
                             callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(cs.getRValue()), cs, targetMethod));
                             q.add(targetMethod);
                         }
@@ -83,20 +82,25 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
         var invokeExp = callSite.getRValue();
         var m = callSite.getMethodRef().getSubsignature();
         switch (CallGraphs.getCallKind(invokeExp)) {
-            case STATIC -> t.add(callSite.getContainer());
+            case STATIC -> t.add(invokeExp.getMethodRef().getDeclaringClass().getDeclaredMethod(m));
             case SPECIAL -> t.add(dispatch(callSite.getMethodRef().getDeclaringClass(), m));
-            case VIRTUAL -> {
+            case VIRTUAL, INTERFACE -> {
                 var c = callSite.getMethodRef().getDeclaringClass();
                 var q = new LinkedList<JClass>();
                 q.add(c);
                 while (!q.isEmpty()) {   // access all direct and indirect subclasses ans subinterfaces
                     var fr = q.removeFirst();
                     t.add(dispatch(fr, m));
-                    q.addAll(hierarchy.getDirectSubclassesOf(fr));
-                    q.addAll(hierarchy.getDirectSubinterfacesOf(fr));
+                    if (fr.isInterface()) {
+                        q.addAll(hierarchy.getDirectSubinterfacesOf(fr));
+                        q.addAll(hierarchy.getDirectImplementorsOf(fr));
+                    } else {
+                        q.addAll(hierarchy.getDirectSubclassesOf(fr));
+                    }
                 }
             }
         }
+        t.remove(null);
         return t;
     }
 
@@ -110,6 +114,9 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
         var realMethod = jclass.getDeclaredMethod(subsignature);
         if (realMethod != null && !realMethod.isAbstract()) {
             return realMethod;
+        }
+        if (jclass.getSuperClass() == null) {
+            return null;
         }
         return dispatch(jclass.getSuperClass(), subsignature);
     }

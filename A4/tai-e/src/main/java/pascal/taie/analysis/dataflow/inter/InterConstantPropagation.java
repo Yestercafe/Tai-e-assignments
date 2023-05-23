@@ -24,8 +24,7 @@ package pascal.taie.analysis.dataflow.inter;
 
 import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.analysis.constprop.ConstantPropagation;
-import pascal.taie.analysis.dataflow.analysis.constprop.Value;,
-import pascal.taie.analysis.graph.cfg.CFG;
+import pascal.taie.analysis.dataflow.analysis.constprop.Value;
 import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.icfg.CallEdge;
 import pascal.taie.analysis.graph.icfg.CallToReturnEdge;
@@ -33,12 +32,14 @@ import pascal.taie.analysis.graph.icfg.NormalEdge;
 import pascal.taie.analysis.graph.icfg.ReturnEdge;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
-import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.classes.JMethod;
+import polyglot.ast.Call;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Implementation of interprocedural constant propagation for int values.
@@ -78,14 +79,18 @@ public class InterConstantPropagation extends
 
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        AtomicBoolean isChanged = new AtomicBoolean(false);
+        in.forEach((k, v) -> {
+            if (out.update(k, v)) {
+                isChanged.set(true);
+            }
+        });
+        return isChanged.get();
     }
 
     @Override
     protected boolean transferNonCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        return cp.transferNode(stmt, in, out);
     }
 
     @Override
@@ -103,22 +108,19 @@ public class InterConstantPropagation extends
                 newOut.remove(lVar);       // do kill x of `x = ...`
             }
         }
-        return null;
+        return newOut;
     }
 
     @Override
     protected CPFact transferCallEdge(CallEdge<Stmt> edge, CPFact callSiteOut) {
-        var newOut = callSiteOut.copy();
+        var newOut = new CPFact();
         var source = edge.getSource();
-        var target = edge.getTarget();
-        if (source instanceof Invoke sourceInvoke) {
-            var args = sourceInvoke.getRValue().getArgs().stream().map(v -> {
-
-            })
+        if (source instanceof Invoke invoke) {
             var params = edge.getCallee().getIR().getParams();
-            assert args.size() == params.size();
-            for (int i = 0; i < args.size(); i++) {
-                newOut.update(params[i], args[i]);
+            var args = invoke.getRValue().getArgs();
+            assert params.size() == args.size();
+            for (int i = 0; i < params.size(); i++) {
+                newOut.update(params.get(i), callSiteOut.get(args.get(i)));
             }
         }
         return newOut;
@@ -126,7 +128,16 @@ public class InterConstantPropagation extends
 
     @Override
     protected CPFact transferReturnEdge(ReturnEdge<Stmt> edge, CPFact returnOut) {
-        // TODO - finish me
-        return null;
+        var newOut = new CPFact();
+        var callSite = edge.getCallSite();
+        var lValue = callSite.getDef();
+        if (lValue.isPresent() && lValue.get() instanceof Var lVar) {
+            if (callSite instanceof Invoke invoke) {
+                for (var ret : edge.getReturnVars()) {
+                    newOut.update(lVar, cp.meetValue(newOut.get(lVar), returnOut.get(ret)));
+                }
+            }
+        }
+        return newOut;
     }
 }

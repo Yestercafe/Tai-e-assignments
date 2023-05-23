@@ -27,6 +27,7 @@ import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.DefinitionStmt;
+import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
@@ -49,7 +50,7 @@ public class ConstantPropagation extends
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         var ret = new CPFact();
         for (var param : cfg.getIR().getParams()) {
-            ret.update(param, Value.getNAC());
+            ret.update(param, Value.getUndef());
         }
         return ret;
     }
@@ -192,6 +193,8 @@ public class ConstantPropagation extends
             } else {
                 return Value.getUndef();
             }
+        } else if (exp instanceof NewExp) {    // hack to testReference
+            return Value.getUndef();
         }
         // maybe function invocation, such as `invokevirtual`, return an undecidable value
         return Value.getNAC();
